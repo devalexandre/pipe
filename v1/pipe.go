@@ -7,10 +7,8 @@ import (
 	"runtime"
 )
 
-// Pipeline agora retorna um resultado do tipo interface{} e um error.
 type Pipeline func(args ...interface{}) (interface{}, error)
 
-// Pipe foi ajustada para suportar o retorno de um resultado e um erro.
 func Pipe(fs ...interface{}) Pipeline {
 	return func(args ...interface{}) (interface{}, error) {
 		var result interface{}
@@ -42,7 +40,6 @@ func Pipe(fs ...interface{}) Pipeline {
 				}
 			}
 
-			// Prepara inputs para a próxima função, excluindo erros.
 			if len(outputs) > 1 {
 				inputs = outputs[:len(outputs)-1]
 			} else {
@@ -55,22 +52,19 @@ func Pipe(fs ...interface{}) Pipeline {
 }
 
 func ParseTo(result interface{}, target interface{}) error {
-	// Verifica se target é um ponteiro.
+
 	if reflect.TypeOf(target).Kind() != reflect.Ptr {
 		return errors.New("target deve ser um ponteiro")
 	}
 
-	// Obtém o valor do resultado e o valor do target.
 	resultValue := reflect.ValueOf(result)
 	targetValue := reflect.ValueOf(target).Elem()
 
-	// Verifica se o tipo do resultado é conversível para o tipo do target.
 	if !resultValue.Type().ConvertibleTo(targetValue.Type()) {
 		return fmt.Errorf("não é possível converter o resultado do tipo %s para o tipo %s",
 			resultValue.Type(), targetValue.Type())
 	}
 
-	// Converte o resultado para o tipo do target e define o valor do target.
 	convertedValue := resultValue.Convert(targetValue.Type())
 	targetValue.Set(convertedValue)
 
