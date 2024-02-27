@@ -107,7 +107,7 @@ func TestCPFPipeline(t *testing.T) {
 	expected := "123.456.789-01"
 	result, err := pipeline(input)
 	if err != nil {
-		t.Fatalf("Pipeline returned an error: %v", err)
+		t.Errorf("Pipeline returned an error: %v", err)
 	}
 
 	if result != expected {
@@ -125,7 +125,7 @@ func TestMathPipeline(t *testing.T) {
 	expected := 18
 	result, err := pipeline(5, 4)
 	if err != nil {
-		t.Fatalf("Pipeline returned an error: %v", err)
+		t.Errorf("Pipeline returned an error: %v", err)
 	}
 
 	if result != expected {
@@ -149,7 +149,7 @@ func TestPersonPipeline(t *testing.T) {
 
 	result, err := pipeline(input)
 	if err != nil {
-		t.Fatalf("Pipeline returned an error: %v", err)
+		t.Errorf("Pipeline returned an error: %v", err)
 	}
 
 	if result != expected {
@@ -166,7 +166,7 @@ func TestMoreArgs(t *testing.T) {
 	expected := 6
 	result, err := pipeline(1)
 	if err != nil {
-		t.Fatalf("Pipeline returned an error: %v", err)
+		t.Errorf("Pipeline returned an error: %v", err)
 	}
 
 	if result != expected {
@@ -192,7 +192,7 @@ func TestPipeGoFn(t *testing.T) {
 
 	result, ok := resultInterface.([]int)
 	if !ok {
-		t.Fatalf("Expected result type []int, got %T", resultInterface)
+		t.Errorf("Expected result type []int, got %T", resultInterface)
 	}
 
 	if len(result) != len(expected) {
