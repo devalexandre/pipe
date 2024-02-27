@@ -2,71 +2,55 @@ package v1
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
-	"runtime"
 )
 
-type Pipeline func(args ...interface{}) (interface{}, error)
+// Pipeline type.
+type Pipeline func(...interface{}) (interface{}, error)
 
+// Pipe creates a pipeline from a series of functions.
 func Pipe(fs ...interface{}) Pipeline {
-	return func(args ...interface{}) (interface{}, error) {
-		var result interface{}
-		var err error
+	return func(initialArgs ...interface{}) (interface{}, error) {
+		var currentArgs []interface{} = initialArgs
+		for _, f := range fs {
+			fnVal := reflect.ValueOf(f)
+			fnType := fnVal.Type()
+			numIn := fnType.NumIn()
 
-		inputs := make([]reflect.Value, len(args))
-		for i, arg := range args {
-			inputs[i] = reflect.ValueOf(arg)
-		}
-
-		for i, f := range fs {
-			funcValue := reflect.ValueOf(f)
-			funcType := funcValue.Type()
-
-			if len(inputs) != funcType.NumIn() {
-				funcName := runtime.FuncForPC(funcValue.Pointer()).Name()
-				return nil, fmt.Errorf("número incorreto de argumentos para a função: %s", funcName)
-			}
-
-			outputs := funcValue.Call(inputs)
-
-			if len(outputs) > 0 {
-				lastOutput := outputs[len(outputs)-1]
-				if lastOutput.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) && !lastOutput.IsNil() {
-					return nil, lastOutput.Interface().(error)
-				}
-				if i == len(fs)-1 && len(outputs) > 0 {
-					result = outputs[0].Interface()
+			// Prepare the input arguments for the current function.
+			in := make([]reflect.Value, numIn)
+			for i := 0; i < numIn; i++ {
+				if i < len(currentArgs) {
+					in[i] = reflect.ValueOf(currentArgs[i])
+				} else if i < len(initialArgs) { // Allow passing manual arguments if not enough currentArgs.
+					in[i] = reflect.ValueOf(initialArgs[i])
+				} else {
+					// If there are not enough arguments to pass to the function, return an error.
+					return nil, errors.New("not enough arguments to pass to function")
 				}
 			}
 
-			if len(outputs) > 1 {
-				inputs = outputs[:len(outputs)-1]
-			} else {
-				inputs = []reflect.Value{}
+			// Call the current function in the pipeline.
+			results := fnVal.Call(in)
+
+			// Assume the last function call results will be used as next input.
+			currentArgs = []interface{}{} // Reset currentArgs for next function.
+			for _, result := range results {
+				if result.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+					if !result.IsNil() { // If the result is an error, return it.
+						return nil, result.Interface().(error)
+					}
+					// If it's a nil error, ignore it for the output.
+				} else {
+					currentArgs = append(currentArgs, result.Interface())
+				}
 			}
 		}
 
-		return result, err
+		// Return the final result which should match the last function's output type.
+		if len(currentArgs) == 1 {
+			return currentArgs[0], nil // Return single value if only one result.
+		}
+		return currentArgs, nil // Return as slice if multiple values.
 	}
-}
-
-func ParseTo(result interface{}, target interface{}) error {
-
-	if reflect.TypeOf(target).Kind() != reflect.Ptr {
-		return errors.New("target deve ser um ponteiro")
-	}
-
-	resultValue := reflect.ValueOf(result)
-	targetValue := reflect.ValueOf(target).Elem()
-
-	if !resultValue.Type().ConvertibleTo(targetValue.Type()) {
-		return fmt.Errorf("não é possível converter o resultado do tipo %s para o tipo %s",
-			resultValue.Type(), targetValue.Type())
-	}
-
-	convertedValue := resultValue.Convert(targetValue.Type())
-	targetValue.Set(convertedValue)
-
-	return nil
 }
