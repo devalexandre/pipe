@@ -11,7 +11,7 @@ type Pipeline func(...interface{}) (interface{}, error)
 // Pipe creates a pipeline from a series of functions.
 func Pipe(fs ...interface{}) Pipeline {
 	return func(initialArgs ...interface{}) (interface{}, error) {
-		var currentArgs []interface{} = initialArgs
+		currentArgs := initialArgs
 		for _, f := range fs {
 			fnVal := reflect.ValueOf(f)
 			fnType := fnVal.Type()
@@ -19,7 +19,7 @@ func Pipe(fs ...interface{}) Pipeline {
 
 			// Prepare the input arguments for the current function.
 			in := make([]reflect.Value, numIn)
-			for i := 0; i < numIn; i++ {
+			for i := range numIn {
 				if i < len(currentArgs) {
 					in[i] = reflect.ValueOf(currentArgs[i])
 				} else if i < len(initialArgs) { // Allow passing manual arguments if not enough currentArgs.
@@ -34,7 +34,7 @@ func Pipe(fs ...interface{}) Pipeline {
 			results := fnVal.Call(in)
 
 			// Assume the last function call results will be used as next input.
-			currentArgs = []interface{}{} // Reset currentArgs for next function.
+			currentArgs = nil // Reset currentArgs for next function.
 			for _, result := range results {
 				if result.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 					if !result.IsNil() { // If the result is an error, return it.
