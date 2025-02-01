@@ -1,56 +1,71 @@
 package v1
 
 import (
-	"errors"
+	"fmt"
 	"reflect"
 )
 
-// Pipeline type.
-type Pipeline func(...interface{}) (interface{}, error)
+// Pipeline define um pipeline que aceita argumentos iniciais e retorna um resultado ou erro.
+type Pipeline func(args ...interface{}) (interface{}, error)
 
-// Pipe creates a pipeline from a series of functions.
+// Pipe cria um pipeline a partir de uma série de funções.
+// Cada função deve ter uma assinatura compatível com o encadeamento:
+//   - Seus parâmetros serão preenchidos com os resultados da função anterior.
+//   - Se uma função retornar um error não-nulo, o pipeline é interrompido.
 func Pipe(fs ...interface{}) Pipeline {
+	// Valida se todos os elementos são funções.
+	for i, f := range fs {
+		if reflect.TypeOf(f).Kind() != reflect.Func {
+			panic(fmt.Sprintf("elemento na posição %d não é uma função", i))
+		}
+	}
+
+	// Obter o tipo que representa o interface error (para evitar repetir esse cálculo).
+	errorType := reflect.TypeOf((*error)(nil)).Elem()
+
 	return func(initialArgs ...interface{}) (interface{}, error) {
 		currentArgs := initialArgs
-		for _, f := range fs {
+
+		// Processa cada função do pipeline.
+		for idx, f := range fs {
 			fnVal := reflect.ValueOf(f)
 			fnType := fnVal.Type()
 			numIn := fnType.NumIn()
 
-			// Prepare the input arguments for the current function.
+			// Prepara os argumentos para a função atual.
 			in := make([]reflect.Value, numIn)
-			for i := range numIn {
+			for i := 0; i < numIn; i++ {
 				if i < len(currentArgs) {
 					in[i] = reflect.ValueOf(currentArgs[i])
-				} else if i < len(initialArgs) { // Allow passing manual arguments if not enough currentArgs.
+				} else if i < len(initialArgs) { // fallback para os argumentos iniciais, se necessário
 					in[i] = reflect.ValueOf(initialArgs[i])
 				} else {
-					// If there are not enough arguments to pass to the function, return an error.
-					return nil, errors.New("not enough arguments to pass to function")
+					return nil, fmt.Errorf("argumentos insuficientes para a função na posição %d", idx)
 				}
 			}
 
-			// Call the current function in the pipeline.
+			// Chama a função e obtém os resultados.
 			results := fnVal.Call(in)
 
-			// Assume the last function call results will be used as next input.
-			currentArgs = nil // Reset currentArgs for next function.
-			for _, result := range results {
-				if result.Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-					if !result.IsNil() { // If the result is an error, return it.
-						return nil, result.Interface().(error)
+			// Prepara os argumentos para a próxima função, resetando currentArgs.
+			currentArgs = make([]interface{}, 0, len(results))
+			for _, res := range results {
+				// Se o resultado implementa error e não é nil, interrompe o pipeline.
+				if res.Type().Implements(errorType) {
+					if !res.IsNil() {
+						return nil, res.Interface().(error)
 					}
-					// If it's a nil error, ignore it for the output.
+					// Caso o error seja nil, não o adiciona aos resultados.
 				} else {
-					currentArgs = append(currentArgs, result.Interface())
+					currentArgs = append(currentArgs, res.Interface())
 				}
 			}
 		}
 
-		// Return the final result which should match the last function's output type.
+		// Se houver apenas um resultado, retorna-o diretamente; caso contrário, retorna um slice.
 		if len(currentArgs) == 1 {
-			return currentArgs[0], nil // Return single value if only one result.
+			return currentArgs[0], nil
 		}
-		return currentArgs, nil // Return as slice if multiple values.
+		return currentArgs, nil
 	}
 }
